@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DURKA Tap</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="manifest.json">
+  <style>
+    body {
+      font-family: Verdana, Geneva, Tahoma, sans-serif;
+      background: #876969;
+      padding: 20px;
+      color: #000;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hidden { display: none; }
+    .box {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 400px;
+      margin: 20px auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      color: #000;
+    }
+    button {
+      padding: 15px 20px;
+      margin-top: 10px;
+      background-color: #68d19b;
+      color: #000;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      width: 100%;
+      font-size: 16px;
+    }
+    input {
+      padding: 12px;
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    #game-area {
+      height: 300px;
+      background-image: url('https://i.pinimg.com/736x/77/b5/05/77b50533a90596be569853b4a93681dd.jpg');
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
+      margin-top: 20px;
+      background-size: cover;
+      background-position: center;
+    }
+    .fruit, .bomb, .durian {
+      position: absolute;
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      cursor: pointer;
+      background-size: cover;
+      background-position: center;
+    }
+    #login-box {
+      background-image: url('https://i.pinimg.com/736x/77/b5/e7/77b5e7df982e2d8e9f3180959499bea6.jpg');
+      background-size: cover;
+      background-position: center;
+    }
+    #dashboard-box {
+      background-image: url('https://i.pinimg.com/736x/77/b5/e7/77b5e7df982e2d8e9f3180959499bea6.jpg');
+      background-size: cover;
+      background-position: center;
+    }
+    #game-box {
+      background-color: #68d19b;
+      background-size: cover;
+      background-position: center;
+    }
+    .fruit { background-image: url('https://static.vecteezy.com/system/resources/previews/005/351/031/non_2x/fresh-fruit-culture-carica-logo-symbol-icon-graphic-design-illustration-idea-creative-vector.jpg'); }
+    .bomb { background-image: url('https://i.pinimg.com/736x/86/75/03/86750384d92d4c8f63c193977cd2088c.jpg'); }
+    .durian { background-image: url('https://i.pinimg.com/736x/91/a0/c0/91a0c0e813130a6bd5611fba92a3b2d3.jpg'); }
+  </style>
+</head>
+<body>
+
+<div class="box" id="login-box">
+  <h2>Masuk</h2>
+  <input id="username" type="text" placeholder="Username" />
+  <button id="login-btn">Masuk</button>
+</div>
+
+<div class="box hidden" id="dashboard-box">
+  <h2>Selamat Bermain, <span id="user-name"></span>!</h2>
+  <p>Point: <span id="points">0</span></p>
+  <p>Ticket: <span id="tickets">0</span></p>
+  <button id="claim-tickets">Claim Ticket</button>
+  <button id="start-game">Mulai Permainan</button>
+  <button id="logout-btn">Keluar</button>
+</div>
+
+<div class="box hidden" id="game-box">
+  <h2>Tap Buahnya Kawan!</h2>
+  <p>Waktu Berakhir: <span id="time-left">30</span>s | Score: <span id="game-score">0</span></p>
+  <div id="game-area"></div>
+  <button id="end-game">Keluar Permainan</button>
+</div>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(() => console.log('Service Worker terdaftar!'))
+      .catch(err => console.error('SW gagal:', err));
+  }
+
+  const loginBox = document.getElementById('login-box');
+  const dashboardBox = document.getElementById('dashboard-box');
+  const gameBox = document.getElementById('game-box');
+
+  let username, points = 0, tickets = 0, gameScore = 0, gameInterval, spawnInterval, timeLeft = 30;
+
+  const KEY_USERS = 'blum_users';
+
+  function saveUsers(users) { localStorage.setItem(KEY_USERS, JSON.stringify(users)); }
+  function loadUsers() { return JSON.parse(localStorage.getItem(KEY_USERS) || '{}'); }
+
+  function saveUser() {
+    const users = loadUsers();
+    users[username].points = points;
+    users[username].tickets = tickets;
+    saveUsers(users);
+  }
+
+  function getLastClaim() {
+    const users = loadUsers();
+    return users[username].lastClaim || 0;
+  }
+
+  function setLastClaim(time) {
+    const users = loadUsers();
+    users[username].lastClaim = time;
+    saveUsers(users);
+  }
+
+  function checkTicketRefresh() {
+    const lastClaim = getLastClaim();
+    const now = Date.now();
+
+    if (!lastClaim || now - lastClaim >= 2 * 60 * 60 * 1000) {
+      tickets = 5;
+      setLastClaim(now);
+      saveUser();
+    }
+  }
+
+  document.getElementById('login-btn').onclick = () => {
+    username = document.getElementById('username').value.trim();
+    if (!username) return alert('Masukan Username!');
+
+    const users = loadUsers();
+    if (!users[username]) {
+      users[username] = { points: 0, tickets: 0, lastClaim: 0 };
+      saveUsers(users);
+    }
+
+    points = users[username].points;
+    tickets = users[username].tickets;
+
+    checkTicketRefresh();
+
+    document.getElementById('user-name').textContent = username;
+    document.getElementById('points').textContent = points;
+    document.getElementById('tickets').textContent = tickets;
+
+    loginBox.classList.add('hidden');
+    dashboardBox.classList.remove('hidden');
+  };
+
+  document.getElementById('claim-tickets').onclick = () => {
+    const lastClaim = getLastClaim();
+    const now = Date.now();
+
+    if (now - lastClaim < 2 * 60 * 60 * 1000) {
+      alert('Sudah claim! Tunggu 2 jam lagi.');
+      return;
+    }
+
+    tickets += 5;
+    setLastClaim(now);
+    saveUser();
+    alert('Kamu Mendapatkan 5 Tiket!');
+    document.getElementById('tickets').textContent = tickets;
+  };
+
+  document.getElementById('start-game').onclick = () => {
+    if (tickets < 1) return alert('Tiket habis! Tunggu 2 jam untuk refresh.');
+    tickets -= 1;
+    saveUser();
+    document.getElementById('tickets').textContent = tickets;
+    startGame();
+  };
+
+  document.getElementById('logout-btn').onclick = () => {
+    dashboardBox.classList.add('hidden');
+    loginBox.classList.remove('hidden');
+  };
+
+  function startGame() {
+    dashboardBox.classList.add('hidden');
+    gameBox.classList.remove('hidden');
+    gameScore = 0;
+    timeLeft = 30;
+    document.getElementById('time-left').textContent = timeLeft;
+    document.getElementById('game-score').textContent = gameScore;
+
+    gameInterval = setInterval(() => {
+      timeLeft--;
+      document.getElementById('time-left').textContent = timeLeft;
+      if (timeLeft <= 0) endGame();
+    }, 1000);
+
+    spawnInterval = setInterval(spawnFruit, 700);
+  }
+
+  function spawnFruit() {
+    const gameArea = document.getElementById('game-area');
+    const item = document.createElement('div');
+
+    const rand = Math.random();
+    let type = 'fruit';
+    if (rand < 0.4) { type = 'bomb'; }
+    else if (rand < 0.5) { type = 'durian'; }
+
+    item.className = type;
+
+    item.style.left = Math.random() * (gameArea.clientWidth - 70) + 'px';
+    item.style.top = '-70px';
+    gameArea.appendChild(item);
+
+    let posY = -70;
+    const fall = setInterval(() => {
+      posY += 5;
+      item.style.top = posY + 'px';
+      if (posY > gameArea.clientHeight) {
+        clearInterval(fall);
+        item.remove();
+      }
+    }, 20);
+
+    item.onclick = () => {
+      if (type === 'fruit') { gameScore += 5; }
+      else if (type === 'bomb') { gameScore -= 10; }
+      else if (type === 'durian') { gameScore += 15; }
+      if (gameScore < 0) gameScore = 0;
+      document.getElementById('game-score').textContent = gameScore;
+      item.remove();
+    };
+  }
+
+  function endGame() {
+    clearInterval(gameInterval);
+    clearInterval(spawnInterval);
+    points += gameScore;
+    saveUser();
+
+    alert(`Permainan Selesai! Score Kamu ${gameScore}`);
+    document.getElementById('points').textContent = points;
+    document.getElementById('tickets').textContent = tickets;
+
+    document.getElementById('game-area').innerHTML = '';
+    gameBox.classList.add('hidden');
+    dashboardBox.classList.remove('hidden');
+  }
+
+  document.getElementById('end-game').onclick = endGame;
+</script>
+
+</body>
+</html>
